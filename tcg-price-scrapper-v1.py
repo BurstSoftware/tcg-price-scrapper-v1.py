@@ -3,56 +3,23 @@ import streamlit as st
 import altair as alt
 from datetime import datetime
 
-# Default data as a fallback
-default_data = {
-    'name': [
-        'Blue-Eyes Spirit Dragon', 'Blue-Eyes White Dragon (SDWD-EN003)', 'Blue-Eyes Tyrant Dragon',
-        'True Light', 'The White Stone of Ancients', 'Neo Blue-Eyes Ultimate Dragon',
-        'Sage with Eyes of Blue', 'Blue-Eyes Ultimate Spirit Dragon', 'Called by the Grave',
-        'Indigo-Eyes Silver Dragon', 'Wishes for Eyes of Blue', 'Majesty of the White Dragons',
-        'Maiden of White', 'Neo Kaiser Sea Horse', 'Roar of the Blue-Eyed Dragons',
-        'Nibiru, the Primal Being', 'Blue-Eyes Ultimate Spirit Dragon (Secret Rare)',
-        'Infinite Impermanence', 'Effect Veiler', 'Maiden of White (Secret Rare)',
-        'Spirit with Eyes of Blue', 'Wishes for Eyes of Blue (Secret Rare)',
-        'Ash Blossom & Joyous Spring', 'Blue-Eyes White Destiny Structure Deck'
-    ],
-    'price': [
-        0.19, 0.21, 0.15, 0.20, 0.17, 0.23, 0.20, 0.24, 0.27, 0.27, 0.42, 0.25,
-        0.26, 0.22, 0.27, 0.48, 0.84, 2.54, 0.33, 1.91, 0.42, 1.16, 1.98, 15.05
-    ],
-    'condition': [
-        'Near Mint', 'Near Mint', 'Near Mint', 'Near Mint', 'Near Mint', 'Near Mint',
-        'Near Mint', 'Near Mint', 'Near Mint', 'Near Mint', 'Near Mint', 'Near Mint',
-        'Near Mint', 'Near Mint', 'Near Mint', 'Near Mint', 'Near Mint', 'Near Mint',
-        'Near Mint', 'Near Mint', 'Near Mint', 'Near Mint', 'Near Mint', 'Near Mint'
-    ],
-    'date_scraped': [datetime.now().strftime('%Y-%m-%d')] * 24,
-    'rarity': [
-        'Common', 'Common', 'Common', 'Common', 'Common', 'Common', 'Common', 'Ultra Rare',
-        'Common', 'Ultra Rare', 'Ultra Rare', 'Super Rare', 'Ultra Rare', 'Super Rare',
-        'Super Rare', 'Common', 'Secret Rare', 'Common', 'Common', 'Secret Rare',
-        'Ultra Rare', 'Secret Rare', 'Common', 'N/A'
-    ]
-}
-
 # Streamlit application
 def main():
     st.title("Yu-Gi-Oh! Price Visualizer")
 
     # File upload
     uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
+
+    # Only proceed if a file is uploaded
     if uploaded_file is not None:
+        # Read the uploaded CSV into a DataFrame
         df = pd.read_csv(uploaded_file)
         st.success("File uploaded successfully!")
-    else:
-        # Use default data if no file is uploaded
-        df = pd.DataFrame(default_data)
-        st.info("Using default dataset. Upload a CSV to use your own data.")
 
-    # Store DataFrame in session state for persistence
-    st.session_state['df'] = df
+        # Store DataFrame in session state for persistence within the session
+        st.session_state['df'] = df
 
-    if 'df' in st.session_state and not st.session_state['df'].empty:
+        # Work with a copy of the DataFrame
         df = st.session_state['df'].copy()
 
         # Filters
@@ -101,9 +68,14 @@ def main():
 
         # Visualization
         st.subheader("Visualization")
-        x_axis = st.selectbox("Select X-axis", df.columns, index=df.columns.get_loc('price'))
-        y_axis = st.selectbox("Select Y-axis", df.columns, index=df.columns.get_loc('name'))
-        color_by = st.selectbox("Color by", df.columns, index=df.columns.get_loc('rarity'))
+        # Ensure default selections are valid by checking column existence
+        x_axis_options = df.columns.tolist()
+        y_axis_options = df.columns.tolist()
+        color_by_options = df.columns.tolist()
+
+        x_axis = st.selectbox("Select X-axis", x_axis_options, index=x_axis_options.index('price') if 'price' in x_axis_options else 0)
+        y_axis = st.selectbox("Select Y-axis", y_axis_options, index=y_axis_options.index('name') if 'name' in y_axis_options else 0)
+        color_by = st.selectbox("Color by", color_by_options, index=color_by_options.index('rarity') if 'rarity' in color_by_options else 0)
 
         chart = alt.Chart(df).mark_circle(size=60).encode(
             x=alt.X(f'{x_axis}:Q' if df[x_axis].dtype in ['int64', 'float64'] else f'{x_axis}:N', title=x_axis.capitalize()),
@@ -131,6 +103,8 @@ def main():
             file_name=f"yugioh_filtered_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv"
         )
+    else:
+        st.warning("Please upload a CSV file to begin.")
 
 if __name__ == "__main__":
     main()
