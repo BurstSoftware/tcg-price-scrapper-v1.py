@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 from datetime import datetime
+import time
 
 # Scraper function
 def scrape_tcg_prices(url="https://www.tcgplayer.com/search/all/product?q=yugioh&view=grid", max_pages=5):
@@ -17,31 +18,37 @@ def scrape_tcg_prices(url="https://www.tcgplayer.com/search/all/product?q=yugioh
         try:
             # Add page parameter to URL
             page_url = f"{url}&page={page}"
-            response = requests.get(page_url, headers=headers)
+            st.write(f"Scraping page {page}: {page_url}")  # Debug output
+            response = requests.get(page_url, headers=headers, timeout=10)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Find all card listings based on TCGPlayer's structure
-            card_listings = soup.select('.search-result')
+            # Updated selectors for TCGPlayer's current structure (as of Feb 2025)
+            card_listings = soup.select('.productListing')
             
             if not card_listings:
+                st.write("No card listings found on this page. Stopping scrape.")
                 break
-                
+            
             for card in card_listings:
                 try:
-                    # Extract data using TCGPlayer-specific selectors
-                    name_elem = card.select_one('.search-result__title')
+                    # Extract data using updated TCGPlayer-specific selectors
+                    name_elem = card.select_one('.productDetailTitle a')
                     name = name_elem.text.strip() if name_elem else 'Unknown'
                     
-                    price_elem = card.select_one('.price--direct')
+                    price_elem = card.select_one('.pricePoint')
                     price = price_elem.text.strip() if price_elem else '0'
                     
-                    condition_elem = card.select_one('.search-result__condition')
+                    condition_elem = card.select_one('.condition')
                     condition = condition_elem.text.strip() if condition_elem else 'Near Mint'
                     
-                    # Clean price (remove $ and convert to float)
-                    price = float(price.replace('$', '').replace(',', '').replace('N/A', '0'))
+                    # Clean price (remove $ and convert to float, handle different formats)
+                    price = price.replace('$', '').replace(',', '').replace('N/A', '0')
+                    try:
+                        price = float(price)
+                    except ValueError:
+                        price = 0.0  # Default to 0 if price can't be converted
                     
                     all_cards.append({
                         'name': name,
@@ -50,9 +57,11 @@ def scrape_tcg_prices(url="https://www.tcgplayer.com/search/all/product?q=yugioh
                         'date_scraped': datetime.now().strftime('%Y-%m-%d')
                     })
                 except Exception as e:
+                    st.write(f"Error processing card on page {page}: {str(e)}")
                     continue
-                    
+            
             page += 1
+            time.sleep(1)  # Add delay to avoid rate limiting
             
         except requests.RequestException as e:
             st.error(f"Error fetching page {page}: {str(e)}")
@@ -81,7 +90,7 @@ def main():
                 if not df.empty:
                     st.success(f"Scraped {len(df)} Yu-Gi-Oh! card listings!")
                 else:
-                    st.warning("No data was scraped. Check the URL or site structure.")
+                    st.warning("No data was scraped. Check the URL, site structure, or try a different search query.")
         else:
             st.error("Please enter a URL")
     
