@@ -1,51 +1,57 @@
-import requests
-from bs4 import BeautifulSoup
+from requests_html import HTMLSession
 import pandas as pd
 import streamlit as st
 import altair as alt
 from datetime import datetime
 import time
 
-# Scraper function
+# Scraper function using requests-html for JavaScript rendering
 def scrape_tcg_prices(url="https://www.tcgplayer.com/search/yugioh/quarter-century-bonanza?productLineName=yugioh&q=yugioh&view=grid&setName=quarter-century-bonanza", max_pages=5):
     all_cards = []
     page = 1
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
+    session = HTMLSession()
     
     while page <= max_pages:
         try:
             # Construct URL with page parameter
             page_url = f"{url}&page={page}"
             st.write(f"Scraping page {page}: {page_url}")  # Debug output
-            response = requests.get(page_url, headers=headers, timeout=10)
-            response.raise_for_status()
             
-            soup = BeautifulSoup(response.content, 'html.parser')
+            # Use HTMLSession to render JavaScript
+            response = session.get(page_url)
+            response.html.render(timeout=20)  # Render JavaScript, increase timeout if needed
             
-            # Updated selectors for TCGPlayer's "quarter-century-bonanza" set page
-            card_listings = soup.select('.productListing')  # Try primary selector
+            # Get the parsed HTML
+            soup = BeautifulSoup(response.html.html, 'html.parser')
+            
+            # Try multiple selectors for card listings (updated based on common TCGPlayer patterns)
+            card_listings = soup.select('.productListing')  # Primary selector
             if not card_listings:
-                # Try alternative selector if primary fails (e.g., for different page layouts)
-                card_listings = soup.select('.search-result')
+                card_listings = soup.select('.search-result')  # Alternative 1
                 if not card_listings:
-                    st.write("No card listings found on this page. Trying alternative selectors...")
-                    card_listings = soup.select('.product-grid-item')
-                if not card_listings:
-                    st.write("No card listings found on this page. Stopping scrape.")
-                    break
+                    card_listings = soup.select('.product-grid-item')  # Alternative 2
+                    if not card_listings:
+                        card_listings = soup.select('.product-card')  # Alternative 3
+                    if not card_listings:
+                        st.write("No card listings found on this page. Stopping scrape.")
+                        break
             
             for card in card_listings:
                 try:
-                    # Extract data using updated TCGPlayer-specific selectors
-                    name_elem = card.select_one('.productDetailTitle a') or card.select_one('.search-result__title')
+                    # Extract data with multiple fallback selectors
+                    name_elem = (card.select_one('.productDetailTitle a') or 
+                               card.select_one('.search-result__title') or 
+                               card.select_one('.product-title'))
                     name = name_elem.text.strip() if name_elem else 'Unknown'
                     
-                    price_elem = card.select_one('.pricePoint') or card.select_one('.price--direct')
+                    price_elem = (card.select_one('.pricePoint') or 
+                                card.select_one('.price--direct') or 
+                                card.select_one('.product-price'))
                     price = price_elem.text.strip() if price_elem else '0'
                     
-                    condition_elem = card.select_one('.condition') or card.select_one('.search-result__condition')
+                    condition_elem = (card.select_one('.condition') or 
+                                   card.select_one('.search-result__condition') or 
+                                   card.select_one('.product-condition'))
                     condition = condition_elem.text.strip() if condition_elem else 'Near Mint'
                     
                     # Clean price (remove $ and convert to float, handle different formats)
@@ -66,12 +72,13 @@ def scrape_tcg_prices(url="https://www.tcgplayer.com/search/yugioh/quarter-centu
                     continue
             
             page += 1
-            time.sleep(1)  # Add delay to avoid rate limiting
+            time.sleep(2)  # Increase delay to avoid rate limiting
             
-        except requests.RequestException as e:
+        except Exception as e:
             st.error(f"Error fetching page {page}: {str(e)}")
             break
-            
+    
+    session.close()
     return pd.DataFrame(all_cards)
 
 # Streamlit application
