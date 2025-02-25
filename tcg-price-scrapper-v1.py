@@ -7,7 +7,7 @@ from datetime import datetime
 import time
 
 # Scraper function
-def scrape_tcg_prices(url="https://www.tcgplayer.com/search/all/product?q=yugioh&view=grid", max_pages=5):
+def scrape_tcg_prices(url="https://www.tcgplayer.com/search/yugioh/quarter-century-bonanza?productLineName=yugioh&q=yugioh&view=grid&setName=quarter-century-bonanza", max_pages=5):
     all_cards = []
     page = 1
     headers = {
@@ -16,7 +16,7 @@ def scrape_tcg_prices(url="https://www.tcgplayer.com/search/all/product?q=yugioh
     
     while page <= max_pages:
         try:
-            # Add page parameter to URL
+            # Construct URL with page parameter
             page_url = f"{url}&page={page}"
             st.write(f"Scraping page {page}: {page_url}")  # Debug output
             response = requests.get(page_url, headers=headers, timeout=10)
@@ -24,23 +24,28 @@ def scrape_tcg_prices(url="https://www.tcgplayer.com/search/all/product?q=yugioh
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Updated selectors for TCGPlayer's current structure (as of Feb 2025)
-            card_listings = soup.select('.productListing')
-            
+            # Updated selectors for TCGPlayer's "quarter-century-bonanza" set page
+            card_listings = soup.select('.productListing')  # Try primary selector
             if not card_listings:
-                st.write("No card listings found on this page. Stopping scrape.")
-                break
+                # Try alternative selector if primary fails (e.g., for different page layouts)
+                card_listings = soup.select('.search-result')
+                if not card_listings:
+                    st.write("No card listings found on this page. Trying alternative selectors...")
+                    card_listings = soup.select('.product-grid-item')
+                if not card_listings:
+                    st.write("No card listings found on this page. Stopping scrape.")
+                    break
             
             for card in card_listings:
                 try:
                     # Extract data using updated TCGPlayer-specific selectors
-                    name_elem = card.select_one('.productDetailTitle a')
+                    name_elem = card.select_one('.productDetailTitle a') or card.select_one('.search-result__title')
                     name = name_elem.text.strip() if name_elem else 'Unknown'
                     
-                    price_elem = card.select_one('.pricePoint')
+                    price_elem = card.select_one('.pricePoint') or card.select_one('.price--direct')
                     price = price_elem.text.strip() if price_elem else '0'
                     
-                    condition_elem = card.select_one('.condition')
+                    condition_elem = card.select_one('.condition') or card.select_one('.search-result__condition')
                     condition = condition_elem.text.strip() if condition_elem else 'Near Mint'
                     
                     # Clean price (remove $ and convert to float, handle different formats)
@@ -74,7 +79,7 @@ def main():
     st.title("Yu-Gi-Oh! Price Scraper and Visualizer")
     
     # Preset URL with option to modify
-    default_url = "https://www.tcgplayer.com/search/all/product?q=yugioh&view=grid"
+    default_url = "https://www.tcgplayer.com/search/yugioh/quarter-century-bonanza?productLineName=yugioh&q=yugioh&view=grid&setName=quarter-century-bonanza"
     url = st.text_input("TCGPlayer URL", value=default_url)
     
     # Scrape button
@@ -90,7 +95,7 @@ def main():
                 if not df.empty:
                     st.success(f"Scraped {len(df)} Yu-Gi-Oh! card listings!")
                 else:
-                    st.warning("No data was scraped. Check the URL, site structure, or try a different search query.")
+                    st.warning("No data was scraped. Check the URL, site structure, or try a different search query (e.g., remove or adjust setName).")
         else:
             st.error("Please enter a URL")
     
